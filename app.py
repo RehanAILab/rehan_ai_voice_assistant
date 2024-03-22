@@ -1,11 +1,14 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory
 import speech_recognition as sr
-from openai import OpenAI
+from openai import OpenAIfrom elevenlabs import Voice, VoiceSettings, play , save ,stream
+from elevenlabs.client import ElevenLabs
 import os
 from pathlib import Path
 import pygame  # Import pygame library
 from dotenv import load_dotenv
 import threading
+from elevenlabs import Voice, VoiceSettings, play , save ,stream
+from elevenlabs.client import ElevenLabs
 
 app = Flask(__name__, static_url_path='/static')
 
@@ -14,6 +17,9 @@ speech_file_path = Path("static") / "output.mp3"
 # Load environment variables from .env
 load_dotenv()
 
+elevenai = ElevenLabs(
+  api_key=os.environ['XI_API_KEY'], # Defaults to ELEVEN_API_KEY
+)
 client = OpenAI(api_key=os.environ['openai_api_key'])
 
 # Initialize the recognizer
@@ -51,19 +57,23 @@ def listen():
                 {"role": "user", "content": "Who are you?"},
                 {"role": "assistant", "content": "As an AI language model, I am programmed to assist you with your queries and concerns to the best of my abilities"},
                 {"role": "user", "content": "Where was it?"},
-                {"role": "user", "content": f"This is the transcribed text: {transcript}"}
+                {"role": "user", "content": f"Give the best {transcript} as possible"},
+
             ]
         )
 
         # Get AI response content
         response_content = response.choices[0].message.content
 
-        audio_response = client.audio.speech.create(
-            model="tts-1",
-            voice="echo",
-            input=response_content
-        )
-        audio_response.stream_to_file(speech_file_path)
+        audio = elevenai.generate(
+                text=response_content,
+                voice=Voice(
+                voice_id=os.environ['voice_id'],
+                settings=VoiceSettings(stability=0.71, similarity_boost=0.5, style=0.0, use_speaker_boost=True)
+                )
+            )
+
+        save(audio, speech_file_path)
 
         res_choice = {
             'response_content': response_content,
@@ -71,7 +81,8 @@ def listen():
         }
 
         # Play the generated audio in a separate thread
-        threading.Thread(target=play_audio).start()
+        threading.Thread(target=playsound, args=(str(speech_file_path),)).start()
+
 
         return res_choice
 
